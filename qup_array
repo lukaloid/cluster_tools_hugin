@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# intended as a function for qup to submit
+# usage: qup_array <commands.lst>
+
+# add -v
+
+if [ $# -ne 1 ]; then
+    echo "WRONG NUMBER OF ARGUMENTS"
+    echo "echo $*"
+    echo "usage: qup_array <commands.lst>"
+    exit 7
+fi
+
+LIST=$1
+
+cmd="`sed -n ${SGE_TASK_ID}p $LIST`"
+echo $cmd
+eval $cmd
+
+exit 0

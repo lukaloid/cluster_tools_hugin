@@ -1,0 +1,171 @@
+#!/bin/bash
+# Author: Luka Ruzic
+
+# add stdout and stderr (print logfiles to session)
+# allow logs to be placed with output
+
+usage() {
+    {
+	echo "Usage:   $0 [options] [qsub_options] \"<job(s)>\""
+	echo "Description: submits job(s) (either commands or scripts) to the cluster"
+	echo "             is essentially a wrapper for:"
+	echo "             qsub -N qup -terse -V -b y -o ~/SGElogs -e ~/SGElogs \"<job(s)>\""
+	echo "             after any and all options for qup, you can add any of the following qsub options before <job(s)>:"
+	echo "                 -N, -hold_jid, -sync, -m, -wd, -M, -m"
+	echo "Options:"
+	echo "   --fg"
+	echo "       foreground the <job(s)> (same as qsub's -sync y)"
+	echo "   --a [<n>] <commands.lst>"
+	echo "       run every line in <commands.lst> file as jobs in an array job (qsub's -t)" 
+	echo "       running <n> in parallel (DEFAULT n: 30) (qsub's -tc)"
+	echo "   --l [<dir>]"
+	echo "       place logfiles in <dir> (qsub's -o <dir> -e <dir>) (DEFAULT: ~/SGElogs)"
+	echo "   --p"
+	echo "       print log files to stdout and stderr (also sets --fg)"
+	echo "   --L"
+	echo "       place logfiles in the working directory (overridden by --l)"
+	echo "   --v"
+	echo "       verbose mode"
+	echo "   --help | -help"
+	echo "       get this usage info"
+	echo
+	echo "NOTE: you can include multiple commands separated by semicolons, as on the command line:"
+	echo "       ex: qup \"fslmerge -t run1 run1_vol*; fslmerge -t run2 run2_vol*\""
+	echo "      works for regular qup AND array jobs (--a)"
+    } >&2
+
+    exit 7
+}
+
+
+### SET UP
+# set defaults
+#ARG_STANDARD="-terse -b y -V -S /bin/bash"
+ARG_STANDARD="-terse -b y -V"
+COMMANDS_AT_A_TIME=30
+ARG_JOBNAME="-N qup"
+# error checking
+if [ ! "$1" ]; then echo "ERROR: insufficient arguments" >&2; usage; fi
+# parse arguments
+while [ "$1" ]; do
+    if [[ "$1" =~ -{0,2}help ]]; then       
+	usage
+    elif [ "$1" == "--d" ]||[ "$1" == "-wd" ]; then
+	WDIR=$2
+	ARG_WDIR="-wd $WDIR"
+	shift 2
+    elif [ "$1" == "--fg" ]; then
+	FG=set
+	shift
+    elif [ "$1" == "--a" ]; then
+	ARRAYJOB=set
+	if [[ "$2" =~ .lst$ ]]; then
+	    COMMANDLIST=$2
+	    shift 1
+	elif [[ "$3" =~ .lst$ ]]; then
+	    COMMANDLIST=$3
+	    COMMANDS_AT_A_TIME=$2
+	    shift 2
+	else
+	    echo "MALFORMED --a option (usage: --a [<n>] <commands.lst>)" >&2
+	    exit 7
+	fi
+	ARG_JOBNAME="-N $(basename ${COMMANDLIST%.lst})"
+	shift
+    elif [ "$1" == "--p" ]; then
+	FG=set
+	PRINTLOGS=set
+	shift
+    elif [ "$1" == "--l" ]; then
+	if [ ! $2 ]||[ ${2:0:1} == "-" ]; then
+	    echo "INSUFFICIENT ARGUMENTS TO --l" >&2
+	    usage
+	elif [ ! -d "$2" ]; then 
+	    echo "NO SUCH DIRECTORY: $2; using ~/SGElogs" >&2
+	    usage
+	else
+	    LOGDIR=$2
+	    shift 2
+	fi
+    elif [ "$1" == "--L" ]; then
+	PUT_LOGS_IN_WD=set
+	shift
+    elif [ "$1" == "--v" ]; then
+	VERBOSE=set
+	shift
+    elif [ "$1" == "-hold_jid" ]; then
+	HOLD_JIDS+=",$2"
+	shift 2
+    elif [ "$1" == "-N" ]; then
+	ARG_JOBNAME="-N $2"
+	shift 2
+    elif [ "$1" == "-sync" ]; then
+	ARG_SYNC="-sync $2"
+	shift 2
+    elif [ "$1" == "-m" ]; then
+	ARG_MAILCOND="-m $2"
+	shift 2
+    elif [ "$1" == "-M" ]; then
+	ARG_MAIL="-M $2"
+	shift 2
+    elif [ "$1" == "-l" ]; then
+	ARG_L=$ARG_L" -l $2"
+	shift 2
+    else ### assume the rest is commands
+	JOB="$*"
+	break
+    fi
+done
+
+[ $PRINTLOGS ] && unset ARG_SYNC
+
+[ $HOLD_JIDS ] && ARG_HOLD="-hold_jid $HOLD_JIDS"
+
+[ $FG ] && FG="-sync y"
+
+if [ ! "$ARG_MAIL" ]&&[ -f ~/.addy ]; then
+    ARG_MAIL="-M $(head -1 ~/.addy)"
+fi
+if [ ! "$ARG_MAILCOND" ]; then
+    ARG_MAILCOND="-m n"
+fi
+
+# set log directory
+if [ ! $LOGDIR ]; then
+    if [ $PUT_LOGS_IN_WD ]; then
+	LOGDIR=${WDIR:-$PWD}
+    elif [ -d ~/SGElogs ]; then
+	LOGDIR=~/SGElogs
+    else
+	LOGDIR=`mktemp -d -p ~/tmp` || mktempfail
+	echo "echo WARNING: ~/SGElogs does not exist; using $LOGDIR instead" >&2
+    fi
+fi
+[ $LOGDIR ] && ARG_LOGS="-o $LOGDIR -e $LOGDIR"
+    
+# submit job
+if [ $ARRAYJOB ]; then
+    cmd="qsub $ARG_STANDARD $ARG_L $ARG_MAIL $ARG_MAILCOND $ARG_HOLD $ARG_JOBNAME $FG $ARG_LOGS ${ARG_WDIR:--cwd} -tc $COMMANDS_AT_A_TIME $* -t 1-$(wc -l < $COMMANDLIST) qup_array $COMMANDLIST"
+    [ $VERBOSE ] && echo $cmd
+    [ $PRINTLOGS ] && jnum=($(eval $cmd)) || eval $cmd
+else
+    cmd="qsub $ARG_STANDARD $ARG_L $ARG_MAIL $ARG_MAILCOND $ARG_HOLD $ARG_JOBNAME $FG $ARG_LOGS ${ARG_WDIR:--cwd} \"$JOB\""
+    [ $VERBOSE ] && echo $cmd
+    [ $PRINTLOGS ] && jnum=($(eval $cmd)) || eval $cmd
+fi
+
+if [ $PRINTLOGS ]; then
+    echo ${jnum[*]:1}
+    awk 'FNR==1 {printf "\n----- %s -----\n",FILENAME} {print $0}' ~/SGElogs/*${jnum[0]}*
+    echo
+    #f=$LOGDIR/qup.o${jnum[0]}   
+    #echo "-----STDOUT (${f:-N/A})-----"    
+    #[ -f $f ] && cat $f
+    #echo
+    #f=$(ls $LOGDIR/qup.e${jnum[0]} 2>/dev/null)
+    #echo "-----STDERR (${f:-N/A})-----"
+    #[ -f $f ] && cat $f
+    #echo
+fi
+
+exit 0
