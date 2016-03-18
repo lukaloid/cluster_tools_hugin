@@ -12,9 +12,9 @@ if [ $# -ne 1 ]; then
     exit 7
 fi
 
-LIST=$1
+list=$1
 
-cmd="`sed -n ${SGE_TASK_ID}p $LIST`"
+cmd="`sed -n ${SGE_TASK_ID}p $list`"
 echo $cmd
 eval $cmd
 

@@ -41,9 +41,9 @@ usage() {
 ### SET UP
 # set defaults
 #ARG_STANDARD="-terse -b y -V -S /bin/bash"
-ARG_STANDARD="-terse -b y -V"
-COMMANDS_AT_A_TIME=30
-ARG_JOBNAME="-N qup"
+arg_standard="-terse -b y -V"
+commands_at_a_time=30
+arg_jobname="-N qup"
 # error checking
 if [ ! "$1" ]; then echo "ERROR: insufficient arguments" >&2; usage; fi
 # parse arguments
@@ -51,30 +51,30 @@ while [ "$1" ]; do
     if [[ "$1" =~ -{0,2}help ]]; then       
 	usage
     elif [ "$1" == "--d" ]||[ "$1" == "-wd" ]; then
-	WDIR=$2
-	ARG_WDIR="-wd $WDIR"
+	wdir=$2
+	arg_wdir="-wd $wdir"
 	shift 2
     elif [ "$1" == "--fg" ]; then
-	FG=set
+	fg=set
 	shift
     elif [ "$1" == "--a" ]; then
-	ARRAYJOB=set
+	arrayjob=set
 	if [[ "$2" =~ .lst$ ]]; then
-	    COMMANDLIST=$2
+	    commandlist=$2
 	    shift 1
 	elif [[ "$3" =~ .lst$ ]]; then
-	    COMMANDLIST=$3
-	    COMMANDS_AT_A_TIME=$2
+	    commandlist=$3
+	    commands_at_a_time=$2
 	    shift 2
 	else
 	    echo "MALFORMED --a option (usage: --a [<n>] <commands.lst>)" >&2
 	    exit 7
 	fi
-	ARG_JOBNAME="-N $(basename ${COMMANDLIST%.lst})"
+	arg_jobname="-N $(basename ${commandlist%.lst})"
 	shift
     elif [ "$1" == "--p" ]; then
-	FG=set
-	PRINTLOGS=set
+	fg=set
+	printlogs=set
 	shift
     elif [ "$1" == "--l" ]; then
 	if [ ! $2 ]||[ ${2:0:1} == "-" ]; then
@@ -84,77 +84,77 @@ while [ "$1" ]; do
 	    echo "NO SUCH DIRECTORY: $2; using ~/SGElogs" >&2
 	    usage
 	else
-	    LOGDIR=$2
+	    logdir=$2
 	    shift 2
 	fi
     elif [ "$1" == "--L" ]; then
-	PUT_LOGS_IN_WD=set
+	put_logs_in_wd=set
 	shift
     elif [ "$1" == "--v" ]; then
-	VERBOSE=set
+	verbose=set
 	shift
     elif [ "$1" == "-hold_jid" ]; then
-	HOLD_JIDS+=",$2"
+	hold_jids+=",$2"
 	shift 2
     elif [ "$1" == "-N" ]; then
-	ARG_JOBNAME="-N $2"
+	arg_jobname="-N $2"
 	shift 2
     elif [ "$1" == "-sync" ]; then
-	ARG_SYNC="-sync $2"
+	arg_sync="-sync $2"
 	shift 2
     elif [ "$1" == "-m" ]; then
-	ARG_MAILCOND="-m $2"
+	arg_mailcond="-m $2"
 	shift 2
     elif [ "$1" == "-M" ]; then
-	ARG_MAIL="-M $2"
+	arg_mail="-M $2"
 	shift 2
     elif [ "$1" == "-l" ]; then
-	ARG_L=$ARG_L" -l $2"
+	arg_L=$arg_L" -l $2"
 	shift 2
     else ### assume the rest is commands
-	JOB="$*"
+	job="$*"
 	break
     fi
 done
 
-[ $PRINTLOGS ] && unset ARG_SYNC
+[ $printlogs ] && unset arg_sync
 
-[ $HOLD_JIDS ] && ARG_HOLD="-hold_jid $HOLD_JIDS"
+[ $hold_jids ] && arg_hold="-hold_jid $hold_jids"
 
-[ $FG ] && FG="-sync y"
+[ $fg ] && fg="-sync y"
 
-if [ ! "$ARG_MAIL" ]&&[ -f ~/.addy ]; then
-    ARG_MAIL="-M $(head -1 ~/.addy)"
+if [ ! "$arg_mail" ]&&[ -f ~/.addy ]; then
+    arg_mail="-M $(head -1 ~/.addy)"
 fi
-if [ ! "$ARG_MAILCOND" ]; then
-    ARG_MAILCOND="-m n"
+if [ ! "$arg_mailcond" ]; then
+    arg_mailcond="-m n"
 fi
 
 # set log directory
-if [ ! $LOGDIR ]; then
-    if [ $PUT_LOGS_IN_WD ]; then
-	LOGDIR=${WDIR:-$PWD}
+if [ ! $logdir ]; then
+    if [ $put_logs_in_wd ]; then
+	logdir=${wdir:-$PWD}
     elif [ -d ~/SGElogs ]; then
-	LOGDIR=~/SGElogs
+	logdir=~/SGElogs
     else
-	LOGDIR=`mktemp -d -p ~/tmp` || mktempfail
+	logdir=`mktemp -d -p ~/tmp` || mktempfail
 	echo "echo WARNING: ~/SGElogs does not exist; using $LOGDIR instead" >&2
     fi
 fi
-[ $LOGDIR ] && ARG_LOGS="-o $LOGDIR -e $LOGDIR"
+[ $logdir ] && arg_logs="-o $logdir -e $logdir"
     
 # submit job
-if [ $ARRAYJOB ]; then
-    cmd="qsub $ARG_STANDARD $ARG_L $ARG_MAIL $ARG_MAILCOND $ARG_HOLD $ARG_JOBNAME $FG $ARG_LOGS ${ARG_WDIR:--cwd} -tc $COMMANDS_AT_A_TIME $* -t 1-$(wc -l < $COMMANDLIST) qup_array $COMMANDLIST"
-    [ $VERBOSE ] && echo $cmd
-    [ $PRINTLOGS ] && jnum=($(eval $cmd)) || eval $cmd
+if [ $arrayjob ]; then
+    cmd="qsub $arg_standard $arg_L $arg_mail $arg_mailcond $arg_hold $arg_jobname $fg $arg_logs ${arg_wdir:--cwd} -tc $commands_at_a_time $* -t 1-$(wc -l < $commandlist) qup_array $commandlist"
+    [ $verbose ] && echo $cmd
+    [ $printlogs ] && jnum=($(eval $cmd)) || eval $cmd
 else
-    cmd="qsub $ARG_STANDARD $ARG_L $ARG_MAIL $ARG_MAILCOND $ARG_HOLD $ARG_JOBNAME $FG $ARG_LOGS ${ARG_WDIR:--cwd} \"$JOB\""
-    [ $VERBOSE ] && echo $cmd
-    [ $PRINTLOGS ] && jnum=($(eval $cmd)) || eval $cmd
+    cmd="qsub $arg_standard $arg_L $arg_mail $arg_mailcond $arg_hold $arg_jobname $fg $arg_logs ${arg_wdir:--cwd} \"$job\""
+    [ $verbose ] && echo $cmd
+    [ $printlogs ] && jnum=($(eval $cmd)) || eval $cmd
 fi
 
-if [ $PRINTLOGS ]; then
+if [ $printlogs ]; then
     echo ${jnum[*]:1}
     awk 'FNR==1 {printf "\n----- %s -----\n",FILENAME} {print $0}' ~/SGElogs/*${jnum[0]}*
     echo
