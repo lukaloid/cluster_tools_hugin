@@ -32,6 +32,7 @@ usage() {
 	echo "NOTE: you can include multiple commands separated by semicolons, as on the command line:"
 	echo "       ex: qup \"fslmerge -t run1 run1_vol*; fslmerge -t run2 run2_vol*\""
 	echo "      works for regular qup AND array jobs (--a)"
+	echo "NOTE: array job: first line of output is the command"
     } >&2
 
     exit 7
@@ -156,16 +157,15 @@ fi
 
 if [ $printlogs ]; then
     echo ${jnum[*]:1}
-    awk 'FNR==1 {printf "\n----- %s -----\n",FILENAME} {print $0}' ~/SGElogs/*${jnum[0]}*
+    if [ $arrayjob ]; then
+	j=${jnum[0]%%.*}
+	ls -1 ~/SGElogs/*${j}* | sed 's|.*\.||g' | sort -n | uniq | while read i; do
+	    awk 'FNR==1 {printf "\n----- %s -----\n",FILENAME} {print $0}' ~/SGElogs/*[oe]${j}.$i
+	done
+    else
+	awk 'FNR==1 {printf "\n----- %s -----\n",FILENAME} {print $0}' ~/SGElogs/*${jnum[0]}*
+    fi
     echo
-    #f=$LOGDIR/qup.o${jnum[0]}   
-    #echo "-----STDOUT (${f:-N/A})-----"    
-    #[ -f $f ] && cat $f
-    #echo
-    #f=$(ls $LOGDIR/qup.e${jnum[0]} 2>/dev/null)
-    #echo "-----STDERR (${f:-N/A})-----"
-    #[ -f $f ] && cat $f
-    #echo
 fi
 
 exit 0
