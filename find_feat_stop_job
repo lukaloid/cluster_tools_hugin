@@ -1,0 +1,77 @@
+#!/bin/bash
+# Author: Luka Ruzic
+
+usage() {
+    echo "Usage: find_feat_stop_job [options]"
+    echo "Description: returns the job ID(s) of the stop job of the requested FEAT job(s)"
+    echo "                the stop job is the last stage of a FEAT job (when it terminates, the analysis has completed)"
+    echo "             if no output directory is specified, return IDs for all FEAT jobs running for $USER"
+    echo "             because there can be latency associated with job submission, find_feat_stop_job"
+    echo "                will wait for <s> seconds for each job to show up (specified by -wait)"
+    echo "Options:"
+    echo "    <fsf>"
+    echo "        return the ID for the FEAT process generating the most recent output directory of <fsf>"
+    echo "    <(g)feat>"
+    echo "        return the ID for the FEAT process generating FEAT directory <(g)feat>"
+    echo "    -wait <s>"
+    echo "        wait <s> seconds for EACH specified job to show up (DEFAULT: 10)"
+    echo "    -u <user>"
+    echo "        wait for <user>'s jobs (DEFAULT: your own)"
+    echo "        (if more than one user, place in quotes)"
+    echo "        (use \"*\" to indicate all users)"
+    
+    exit 7
+}
+
+### PARSE ARGUMENT
+timeout=10
+user=$USER
+while [ $1 ]; do
+    if [[ $1 =~ \.fsf$ ]]; then
+	if [ ! -f $1 ]; then echo ERROR: $1 does not exist; exit 1; fi
+	# find the most recent output directory associated with design file $1
+	feat+=("$(ls -dt1 $(fsfinfo -o $1 | sed 's|\.g\{0,1\}feat/\{0,1\}$||')* | head -1)")
+    elif [[ $1 =~ \.g{0,1}feat/{0,1}$ ]]; then
+	if [ ! -d $1 ]; then echo ERROR: $1 does not exist; exit 1; fi
+	feat+=($1)
+    elif [ $1 == "-wait" ]; then
+	if [ ! $2 ]||[ `echo $2 | grep -c '[^0-9]'` -ne 0 ]; then echo "ERROR: -wait must be followed by 0 or a positive integer"; exit 1; fi
+	timeout=$2
+	shift 2
+    elif [ "$1" == "-u" ]; then
+        if [ ! "$2" ]||[[ "$2" =~ ^- ]]; then
+            echo "MALFORMED ARGUMENT to -u: $*"
+            usage
+        else
+            user="$2"
+        fi
+	shift
+    else
+	echo "UNRECOGNIZED OPTION: $1"
+	usage
+    fi
+    shift
+done
+
+if [ $feat ]; then
+    for feat in ${feat[*]}; do
+#	feat=$(echo $feat | sed -e 's|^/data/projects/|/dreamio2/|' -e 's|^/projects/|/dreamio2/|')
+	f=$(readlink -f $feat)
+	unset success; unset oncethrough
+	to=$(expr $(date +%s) + $timeout)
+	until [ $oncethrough ]&&[ `date +%s` -gt $to ]; do
+	    oncethrough=set
+	    for j in $(qstat -u "$user" | awk '/feat5_stop/ {print $1}'); do
+		if [ "$(qstat -j $j | awk '$1 == "sge_o_workdir:" && $2 == "'$f'" {print "match"}')" ]; then success=set; echo $j; fi
+	    done
+	    [ $success ] && break
+	done
+    done
+else
+    for j in $(qstat -u "$user" | awk '/feat5_stop/ {print $1}'); do
+	[[ ! "$(qstat -j $j | awk '$1 == "sge_o_workdir:" {print $2}')" =~ \.gfeat/cope ]] && echo $j
+    done
+fi
+
+
+exit 0
