@@ -4,6 +4,7 @@
 usage() {
     {
 	echo " Usage: $0 [options]"
+	echo " Description:  use to monitor a Sun Grid Engine (originally based on dreamon, CU Boulder)"
 	echo " Options:"
 	echo "      -m [<s>]     start up active monitor with <s> refresh (DEFAULT: 0.5s)"
 	echo "      -up          uptime for the cluster"
@@ -12,11 +13,9 @@ usage() {
 	echo "      -lr [user]   list of running jobs with jobID, user, job name, slots, and status"
 	echo "      -j [user]    print job IDs of running jobs"
 	echo "      -jr [user]   print job IDs of all jobs"
-	echo "      -f [user]    print list of FEAT jobs, who is running them, and their jobIDs"
+	#echo "      -f [user]    print list of FEAT jobs, who is running them, and their jobIDs"
 	echo
-	echo " Description:  use to monitor a Sun Grid Engine (originally based on dreamon, CU Boulder)"
-	echo
-	echo " Notes:  options work with or without -'s"
+	echo " Notes:  options work with or without -'s (ex: sgemon m)"
     }
 
     exit ${exnum:1}
@@ -93,6 +92,9 @@ elif [ ${1#-} == "jr" ]||[ ${1#-} == "jrlist" ]; then
 #    done < <(qstat -u "${user:-*}" | awk 'NR>2 && $5=="r" {print $1,$3,$4}') | grep '\.fsf' | awk '$1 ~ /'${user:-.}'/' | sort -n | uniq
 
 elif [ ${1#-} == "feat" ]||[ ${1#-} == "f" ]; then
+    echo "WARNING: only works correctly if FSL is configured to self-submit jobs to SGE"
+    echo "         (not expected to work on hugin)"
+
     [ $2 ] && user="$2"
     # find all feat5_stop jobs
     for j in `qstat -u "${user:-*}" | awk '/feat5_stop/ {print $1}'`; do
