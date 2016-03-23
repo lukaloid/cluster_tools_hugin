@@ -8,6 +8,8 @@ usage() {
     echo "             if no output directory is specified, return IDs for all FEAT jobs running for $USER"
     echo "             because there can be latency associated with job submission, find_feat_stop_job"
     echo "                will wait for <s> seconds for each job to show up (specified by -wait)"
+    echo "NOTE: only works if FSL is set up to self-submit jobs to SGE"
+    echo "      (not expected to work on hugin)"
     echo "Options:"
     echo "    <fsf>"
     echo "        return the ID for the FEAT process generating the most recent output directory of <fsf>"
