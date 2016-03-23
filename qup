@@ -40,9 +40,7 @@ usage() {
 
 
 ### SET UP
-if [[ "$*" =~ -help$ ]]; then
-    usage 0
-fi
+[[ "$*" =~ -help$ ]] && usage 0
 if [ ! "$1" ]; then 
     echo "ERROR: insufficient arguments" >&2;
     usage

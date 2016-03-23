@@ -26,10 +26,7 @@ if [ $# -lt 1 ]; then
     usage
 fi
 
-if [[ "$*" =~ -help$ ]]; then
-    usage 0
-fi
-
+[[ "$*" =~ -help$ ]] && usage 0
 
 if [ ${1#-} == "m" ]; then
     watch --interval=${2:-.5} "sgemon up; echo; sgemon u; echo ; echo TO EXIT: ctrl c"
