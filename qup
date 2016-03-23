@@ -35,18 +35,23 @@ usage() {
 	echo "NOTE: array job: first line of output is the command"
     } >&2
 
-    exit 7
+    exit ${1:-1}
 }
 
 
 ### SET UP
+if [[ "$*" =~ -help$ ]]; then
+    usage 0
+fi
+if [ ! "$1" ]; then 
+    echo "ERROR: insufficient arguments" >&2;
+    usage
+fi
 # set defaults
-#ARG_STANDARD="-terse -b y -V -S /bin/bash"
+#arg_standard="-terse -b y -V -S /bin/bash"
 arg_standard="-terse -b y -V"
 commands_at_a_time=30
 arg_jobname="-N qup"
-# error checking
-if [ ! "$1" ]; then echo "ERROR: insufficient arguments" >&2; usage; fi
 # parse arguments
 while [ "$1" ]; do
     if [[ "$1" =~ -{0,2}help ]]; then       
