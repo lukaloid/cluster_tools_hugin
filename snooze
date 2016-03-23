@@ -1,0 +1,114 @@
+#!/bin/bash
+# Author: Luka Ruzic
+
+usage() {
+    {
+	echo "Usage:    snooze [options]"
+	echo "Description:  sleep until cluster jobs submitted by user are done "
+	echo "              (without -j or -f: wait on all running and queued jobs)"
+	echo "              SGE ONLY!"
+	echo "Options:"
+	echo "     -j [jobID] [...]"
+	echo "          sleep until job(s) done"
+#	echo "     -f [<fsf>|<feat>] [...]"
+#	echo "          sleep until FEAT job(s) done"
+	echo "     -u <user>"
+	echo "          wait for <user>'s jobs (DEFAULT: your own)"
+	echo "          (if more than one user, place in quotes)"
+	echo "          (use a star in quotes (\"*\") for all users)"
+	echo "     -wait <s>"
+	echo "          wait <s> seconds for EACH specified job to show up (DEFAULT: 10)"
+	echo "     -s"
+	echo "          silent mode"
+	echo "     -m [<addy>]"
+	echo "          send e-mail notification to <addy> upon waking up (default: first line of ~/.addy)"
+	echo
+	echo "NOTE: if waiting for \"all\" jobs, will ignore jobs named \"interact\" or \"QRLOGIN\""	
+    } >&2
+    exit ${1:-1}
+}
+
+[[ "$*" =~ help$ ]] && usage 0
+
+### PARSE ARGUMENTS
+TIMEOUT=10
+user=$USER
+while [ $1 ]; do
+    if [ $1 == "-j" ]; then
+	shift
+	while [ "$1" ]&&[ "${1:0:1}" != "-" ]; do
+	    jorbs+=$1,
+	    shift
+	done
+    elif [ $1 == "-f" ]; then
+	echo "WARNING: only works if FSL is set up to self-submit jobs to SGE"
+	echo "         (not expected to work on hugin)"
+	shift
+	while [ "$1" ]&&[ "${1:0:1}" != "-" ]; do
+	    if [ ${1##*.} == "fsf" ]; then
+		feat+=" `fsfinfo -o $1`"
+	    elif [[ ${1##*.} =~ "feat" ]]; then
+		feat+=" $1"
+	    else
+		echo "UNRECOGNIZED ARGUMENT TO -f: $1" >&2
+		usage
+	    fi
+	    shift
+	done
+	[ "$feat" ] || feat=set
+    elif [ "$1" == "-u" ]; then
+	if [ ! $2 ]||[[ "$2" =~ ^- ]]; then
+	    echo "MALFORMED ARGUMENT to -u: $*" >&2
+	    usage
+	else
+	    user="$2"
+	    shift 2
+	fi
+    elif [ $1 == "-wait" ]||[ $1 == "-to" ]; then
+	if [ ! $2 ]||[[ "$2" =~ ^- ]]||[ `echo $2 | grep -cE [^0-9]` -ne 0 ]; then
+	    echo "MALFORMED ARGUMENT to -to: $*" >&2
+	    usage
+	else
+	    TIMEOUT=$2
+	fi
+	shift 2
+    elif [ $1 == "-s" ]; then
+	SILENT=set
+	shift
+    elif [ $1 == "-m" ]; then 
+	NOTIFY=set; shift
+	if [ $1 ]&&[ ${1:0:1} != "-" ]; then
+	    ADDY=$1; shift
+	elif [ -f ~/.addy ]; then
+	    ADDY=$(head -1 ~/.addy)
+	else
+	    echo "ERROR: no email address given, no ~/.addy file (one is required with -m option)" 2>/dev/null
+	    exit 1
+	fi	    
+    else
+	echo "UNRECOGNIZED OPTION: $1" >&2
+	usage
+    fi
+done
+
+
+if [ "$feat" == "set" ]; then
+    jorbs+=$(find_feat_stop_job -u "$user" | tr '\n' ,),
+elif [ "$feat" ]; then
+    jorbs+=$(find_feat_stop_job -u "$user" $feat | tr '\n' ,),
+elif [ ! $jorbs ]; then
+    #jorbs=`dreamon jlist $user | tr '\n' ,`
+    #jorbs=`dreamon l $user | awk 'NR>1 && $3!="QRLOGIN" {print $1}' | tr '\n' ,`
+    jorbs=$(qstat -u "$user" | awk 'NR>2 && $3!="QRLOGIN" && $3!="interact" {print $1}' | tr '\n' ,)
+fi
+
+jorbs=${jorbs%,}
+
+if [ $jorbs ]; then
+    [ $SILENT ] || printf "sleeping until following jobs are done:\n%s\n" "$jorbs"
+    (qup --fg -m n -N snooze -hold_jid $jorbs "sleep 0s") > /dev/null
+fi
+
+[ $NOTIFY ] && mail -s "${SUBJECT:-snooze over}" ${ADDY:-`cat ~/.forward`} < <(printf "the following jobs are done:\n%s\n" "$jorbs")
+
+exit 0
